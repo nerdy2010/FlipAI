@@ -117,14 +117,17 @@ async function fetchValueSerp(apiKey: string, params: Record<string, string>): P
   });
 
   const targetUrl = url.toString();
+  // PROXY FIX: Use CodeTabs to bypass CORS/Header restrictions that cause 400 errors
+  const proxyUrl = "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(targetUrl);
   
   try {
     // --- DEBUG LOGGING START ---
-    console.log(`[ValueSERP] GET Request:`, targetUrl);
+    console.log(`[ValueSERP] Target:`, targetUrl);
+    console.log(`[ValueSERP] Proxy:`, proxyUrl);
     // --- DEBUG LOGGING END ---
 
-    // DIRECT FETCH (GET) - Requires CORS Extension
-    const res = await fetch(targetUrl);
+    // Fetch via CodeTabs Proxy
+    const res = await fetch(proxyUrl);
     
     // Read the raw text first to debug errors
     const rawText = await res.text();
