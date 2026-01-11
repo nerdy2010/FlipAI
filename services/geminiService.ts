@@ -5,7 +5,7 @@ import { AnalysisResult, ProductOption } from "../types";
 const SEARCH_MODEL = "gemini-3-pro-preview"; // The Brain (High IQ for Analysis)
 const CHAT_MODEL = "gemini-3-flash-preview"; // The Mouth (Fast/Cheap for Chat)
 
-// ValueSERP Testing Key (Hardcoded for Verification)
+// ValueSERP Testing Key (Fallback only)
 const DEFAULT_VALUESERP_KEY = "87F54B6AC7E8466B867587FA1487C7A1"; 
 
 // CORRECT BASE URL
@@ -18,11 +18,18 @@ const getAI = () => {
 };
 
 const getValueSerpKey = () => {
+  // Priority 1: Vercel Environment Variable (Best for Production)
+  if (typeof process !== 'undefined' && process.env.VALUESERP_API_KEY) {
+      return process.env.VALUESERP_API_KEY;
+  }
+
+  // Priority 2: Local Storage (Legacy/Dev support)
   if (typeof localStorage !== 'undefined') {
-    // Priority: User's saved ValueSERP key
     const userKey = localStorage.getItem("flipai_valueserp_key");
     if (userKey && userKey.length > 5) return userKey;
   }
+
+  // Priority 3: Hardcoded Fallback
   return DEFAULT_VALUESERP_KEY;
 };
 
