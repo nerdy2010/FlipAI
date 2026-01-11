@@ -8,8 +8,8 @@ const CHAT_MODEL = "gemini-3-flash-preview"; // The Mouth (Fast/Cheap for Chat)
 // ValueSERP Testing Key (Fallback only)
 const DEFAULT_VALUESERP_KEY = "87F54B6AC7E8466B867587FA1487C7A1"; 
 
-// CORRECT BASE URL
-const VALUESERP_BASE_URL = "https://api.valueserp.com/search";
+// CORRECT BASE URL (Relative path for Vercel/Vite Proxy)
+const VALUESERP_BASE_URL = "/api/search";
 
 // --- CLIENT INITIALIZATION ---
 const getAI = () => {
@@ -108,26 +108,23 @@ const cleanQuery = (text: string): string => {
 
 // --- HELPER: DIRECT GET FETCH ---
 async function fetchValueSerp(apiKey: string, params: Record<string, string>): Promise<any> {
-  // Construct URL with URLSearchParams to handle encoding automatically
-  const url = new URL(VALUESERP_BASE_URL);
-  url.searchParams.append("api_key", apiKey);
+  // Construct query parameters
+  const searchParams = new URLSearchParams();
+  searchParams.append("api_key", apiKey);
   
   Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.append(key, value);
+      searchParams.append(key, value);
   });
 
-  const targetUrl = url.toString();
-  // PROXY FIX: Use CodeTabs to bypass CORS/Header restrictions that cause 400 errors
-  const proxyUrl = "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(targetUrl);
+  // Use relative path - Vercel (prod) or Vite (dev) will proxy this to https://api.valueserp.com/search
+  const url = `${VALUESERP_BASE_URL}?${searchParams.toString()}`;
   
   try {
     // --- DEBUG LOGGING START ---
-    console.log(`[ValueSERP] Target:`, targetUrl);
-    console.log(`[ValueSERP] Proxy:`, proxyUrl);
+    console.log(`[ValueSERP] Requesting:`, url);
     // --- DEBUG LOGGING END ---
 
-    // Fetch via CodeTabs Proxy
-    const res = await fetch(proxyUrl);
+    const res = await fetch(url);
     
     // Read the raw text first to debug errors
     const rawText = await res.text();
