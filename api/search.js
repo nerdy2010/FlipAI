@@ -1,26 +1,31 @@
 export default async function handler(req, res) {
-  try {
-    // 1. Construct the target URL using the incoming query parameters from the frontend
-    // req.url includes the query string (e.g., /api/search?q=iphone&api_key=...)
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const targetUrl = `https://api.valueserp.com/search${url.search}`;
+  // 1. Get query parameters from the incoming request
+  // Vercel parses the query string into an object automatically
+  const queryParams = req.query;
 
-    // 2. Server-side fetch
-    // This runs on Vercel's servers, so it does not send your browser's headers.
+  // 2. Convert them back to a clean query string
+  // This ensures proper encoding of spaces, special characters, etc.
+  const queryString = new URLSearchParams(queryParams).toString();
+
+  // 3. Construct the Target URL
+  // We attach the cleaned query string to the ValueSERP API endpoint
+  const targetUrl = `https://api.valueserp.com/search?${queryString}`;
+
+  try {
+    // 4. Call ValueSERP from the server side
+    // This requests the data without sending browser-specific headers (like Referer) 
+    // that might trigger ValueSERP's security blocks (400 Bad Request).
     const response = await fetch(targetUrl);
     
-    // 3. Handle response
-    const contentType = response.headers.get("content-type");
+    // 5. Get the JSON data from ValueSERP
+    const data = await response.json();
+
+    // 6. Return the data to the frontend
+    // We forward the status code from ValueSERP (e.g., 200 or error codes)
+    res.status(response.status).json(data);
     
-    if (contentType && contentType.includes("application/json")) {
-        const data = await response.json();
-        return res.status(response.status).json(data);
-    } else {
-        const text = await response.text();
-        return res.status(response.status).send(text);
-    }
   } catch (error) {
     console.error("Proxy Error:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    res.status(500).json({ error: "Server Proxy Failed", details: error.message });
   }
 }
