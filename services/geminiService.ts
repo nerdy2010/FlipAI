@@ -8,7 +8,7 @@ const CHAT_MODEL = "gemini-3-flash-preview"; // The Mouth (Fast/Cheap for Chat)
 // ValueSERP Testing Key (Fallback only)
 const DEFAULT_VALUESERP_KEY = "87F54B6AC7E8466B867587FA1487C7A1"; 
 
-// CORRECT BASE URL (Relative path for Vercel/Vite Proxy)
+// CORRECT BASE URL: Points to Vercel Serverless Function (api/search.js)
 const VALUESERP_BASE_URL = "/api/search";
 
 // --- CLIENT INITIALIZATION ---
@@ -92,7 +92,6 @@ const cleanQuery = (text: string): string => {
     if (!text) return "";
     
     // 1. Strict Sanitization: Remove special chars (/, &, +, %, etc)
-    // This prevents 400 Bad Request errors from broken URL params
     let cleaned = text.replace(/[^a-zA-Z0-9\s]/g, " ");
     
     // 2. Cleanup spaces
@@ -116,12 +115,12 @@ async function fetchValueSerp(apiKey: string, params: Record<string, string>): P
       searchParams.append(key, value);
   });
 
-  // Use relative path - Vercel (prod) or Vite (dev) will proxy this to https://api.valueserp.com/search
+  // Call our Vercel Serverless Function
   const url = `${VALUESERP_BASE_URL}?${searchParams.toString()}`;
   
   try {
     // --- DEBUG LOGGING START ---
-    console.log(`[ValueSERP] Requesting:`, url);
+    console.log(`[ValueSERP] Requesting Proxy:`, url);
     // --- DEBUG LOGGING END ---
 
     const res = await fetch(url);

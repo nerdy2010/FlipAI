@@ -1,8 +1,0 @@
-{
-  "rewrites": [
-    {
-      "source": "/api/search",
-      "destination": "https://api.valueserp.com/search"
-    }
-  ]
-}
