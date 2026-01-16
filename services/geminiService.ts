@@ -7,7 +7,17 @@ const CHAT_MODEL = "gemini-3-flash-preview"; // The Mouth
 
 // --- CLIENT INITIALIZATION ---
 const getAI = () => {
+  // Access the key via process.env.API_KEY as configured in vite.config.ts
   const apiKey = process.env.API_KEY;
+  
+  // DEBUG: Alert the status (First 4 chars only for safety)
+  if (!apiKey) {
+      alert("CRITICAL DEBUG: Gemini API Key is UNDEFINED/MISSING. Please check Vercel Environment Variables (GEMINI_API_KEY).");
+      console.error("Gemini API Key is missing.");
+  } else {
+      console.log("Key found:", apiKey.substring(0,4) + "...");
+  }
+
   if (!apiKey) {
     throw new Error("Configuration Error: Gemini API Key is missing. Please check your environment variables.");
   }
