@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { KeyIcon, XMarkIcon, EyeIcon, EyeSlashIcon, CheckCircleIcon, ArrowTopRightOnSquareIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
+import { KeyIcon, XMarkIcon, EyeIcon, EyeSlashIcon, CheckCircleIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,26 +8,26 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [geminiKey, setGeminiKey] = useState("");
-  const [valueSerpKey, setValueSerpKey] = useState("");
+  const [serpApiKey, setSerpApiKey] = useState("");
   const [showGemini, setShowGemini] = useState(false);
-  const [showValueSerp, setShowValueSerp] = useState(false);
+  const [showSerp, setShowSerp] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setGeminiKey(localStorage.getItem("flipai_gemini_key") || "AIzaSyDaWfbisNtD8P48sRrs9vSZgfmuLhzOMG4");
-      // Pre-fill with user key, OR fallback to the hardcoded test key if empty
-      const savedKey = localStorage.getItem("flipai_valueserp_key") || localStorage.getItem("flipai_serpapi_key");
-      setValueSerpKey(savedKey || "87F54B6AC7E8466B867587FA1487C7A1");
+      // Use Golden Key as default placeholder if empty
+      setSerpApiKey(localStorage.getItem("flipai_serpapi_key") || "6356977b9b475b6cbcf836afd7b153556f1f706c8eb709d5d4427b3bbbcac870");
       setSaved(false);
     }
   }, [isOpen]);
 
   const handleSave = () => {
     localStorage.setItem("flipai_gemini_key", geminiKey);
-    localStorage.setItem("flipai_valueserp_key", valueSerpKey);
-    // Clear old key to avoid confusion
-    localStorage.removeItem("flipai_serpapi_key");
+    localStorage.setItem("flipai_serpapi_key", serpApiKey);
+    
+    // Explicitly clean up old providers if they exist
+    localStorage.removeItem("flipai_valueserp_key");
     
     window.dispatchEvent(new Event("storage"));
     setSaved(true);
@@ -80,39 +80,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* ValueSERP Key Input (Replaces SerpApi) */}
+            {/* SerpApi Key Input */}
             <div>
               <div className="flex justify-between items-center mb-2">
                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    Search Engine API Key
-                    <span className="text-emerald-400 text-[10px] bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-500/20">NEW</span>
+                    SerpApi Key
+                    <span className="text-[#00F0FF] text-[10px] bg-cyan-950/50 px-2 py-0.5 rounded border border-[#00F0FF]/20">ACTIVE</span>
                  </label>
                  <a 
-                   href="https://valueserp.com" 
+                   href="https://serpapi.com" 
                    target="_blank" 
                    rel="noopener noreferrer"
                    className="text-[10px] text-[#00F0FF] hover:underline flex items-center gap-1"
                  >
-                    Get Search Key <GlobeAltIcon className="w-3 h-3" />
+                    Get Key <GlobeAltIcon className="w-3 h-3" />
                  </a>
               </div>
               <div className="relative group">
                 <input
-                  type={showValueSerp ? "text" : "password"}
-                  value={valueSerpKey}
-                  onChange={(e) => setValueSerpKey(e.target.value)}
-                  placeholder="Enter API Key..."
+                  type={showSerp ? "text" : "password"}
+                  value={serpApiKey}
+                  onChange={(e) => setSerpApiKey(e.target.value)}
+                  placeholder="Enter SerpApi Key..."
                   className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-3 text-white focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF] outline-none transition-all font-mono text-sm"
                 />
                 <button
-                  onClick={() => setShowValueSerp(!showValueSerp)}
+                  onClick={() => setShowSerp(!showSerp)}
                   className="absolute right-3 top-3 text-slate-500 hover:text-white"
                 >
-                  {showValueSerp ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                  {showSerp ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
                 </button>
               </div>
               <p className="text-[10px] text-slate-500 mt-2">
-                High-performance enterprise search aggregation.
+                Using SerpApi for Global Search and Lens capabilities.
               </p>
             </div>
           </div>

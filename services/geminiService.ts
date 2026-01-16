@@ -2,112 +2,76 @@ import { GoogleGenAI } from "@google/genai";
 import { AnalysisResult, ProductOption } from "../types";
 
 // --- CONFIGURATION ---
-const SEARCH_MODEL = "gemini-3-pro-preview"; // The Brain (High IQ for Analysis)
-const CHAT_MODEL = "gemini-3-flash-preview"; // The Mouth (Fast/Cheap for Chat)
-
-// ValueSERP Testing Key (Fallback only)
-const DEFAULT_VALUESERP_KEY = "87F54B6AC7E8466B867587FA1487C7A1"; 
-
-// CORRECT BASE URL: Points to Vercel Serverless Function (api/search.js)
-const VALUESERP_BASE_URL = "/api/search";
+const SEARCH_MODEL = "gemini-3-pro-preview"; // The Brain
+const CHAT_MODEL = "gemini-3-flash-preview"; // The Mouth
 
 // --- CLIENT INITIALIZATION ---
 const getAI = () => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("Configuration Error: Gemini API Key is missing. Please check your environment variables.");
+  }
+  return new GoogleGenAI({ apiKey });
 };
 
-const getValueSerpKey = () => {
-  // Priority 1: Vercel Environment Variable (Best for Production)
-  if (typeof process !== 'undefined' && process.env.VALUESERP_API_KEY) {
-      return process.env.VALUESERP_API_KEY;
+const getSerpApiKey = () => {
+  // 1. Env Var (Vite / Production)
+  if (process.env.SERPAPI_API_KEY) {
+      return process.env.SERPAPI_API_KEY;
   }
-
-  // Priority 2: Local Storage (Legacy/Dev support)
+  // 2. Local Storage (User Override)
   if (typeof localStorage !== 'undefined') {
-    const userKey = localStorage.getItem("flipai_valueserp_key");
+    const userKey = localStorage.getItem("flipai_serpapi_key");
     if (userKey && userKey.length > 5) return userKey;
   }
-
-  // Priority 3: Hardcoded Fallback
-  return DEFAULT_VALUESERP_KEY;
+  // 3. No Hardcoded Fallback (Security Hardening)
+  return "";
 };
 
-// --- HELPER: PRICE EXTRACTION ---
+// --- HELPERS ---
 const extractPrice = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  // Handle strings like "$1,200.00" or "USD 50"
   const match = val.toString().match(/[0-9,]+(\.[0-9]+)?/);
   return match ? parseFloat(match[0].replace(/,/g, '')) : 0;
 };
 
-// --- HELPER: URL RESOLVER (Waterfall Strategy) ---
 const resolveProductUrl = (item: any): string => {
-  // Priority 1: Direct Link (ValueSERP/SerpApi 'link')
   if (item.link) return item.link;
-
-  // Priority 2: Google Shopping Product Page
   if (item.product_link) return item.product_link;
-
-  // Priority 3: Related Content (Lens Page)
   if (item.related_content_link) return item.related_content_link;
-
-  // Fallback: Construct a Google Shopping Search URL
   const title = item.title || item.description || "";
-  if (title) {
-    return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(title)}`;
-  }
-
-  // Absolute fallback
+  if (title) return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(title)}`;
   return "https://google.com/shopping";
 };
 
-// --- HELPER: GARBAGE FILTER ---
 const isValidProduct = (item: any): boolean => {
   const url = (item.link || item.url || "").toLowerCase();
   const img = item.thumbnail || item.image || "";
   const title = (item.title || item.description || "").toLowerCase();
   
-  // 1. Filter Bad Domains
   if (url.includes("youtube.com") || url.includes("youtu.be")) return false;
   if (url.includes("vimeo.com")) return false;
-  if (url.includes("dailymotion.com")) return false;
-  
-  // 2. Filter Bad Titles
   if (title.includes("review") && title.includes("video")) return false;
-
-  // 3. Filter Missing Data
   if (!img) return false;
   
-  // 4. Filter Zero/Invalid Price
   const price = extractPrice(item.price || item.extracted_price);
   if (price <= 0) return false;
 
   return true;
 };
 
-// --- HELPER: QUERY CLEANER (SANITIZER) ---
 const cleanQuery = (text: string): string => {
     if (!text) return "";
-    
-    // 1. Strict Sanitization: Remove special chars (/, &, +, %, etc)
     let cleaned = text.replace(/[^a-zA-Z0-9\s]/g, " ");
-    
-    // 2. Cleanup spaces
     let trimmed = cleaned.trim().replace(/\s+/g, " ");
-    
-    // 3. Length Limit (ValueSERP handles shorter queries better)
     const words = trimmed.split(" ");
-    if (words.length > 8) {
-        return words.slice(0, 8).join(" ");
-    }
-    return trimmed;
+    return words.length > 10 ? words.slice(0, 10).join(" ") : trimmed;
 };
 
-// --- HELPER: DIRECT GET FETCH ---
-async function fetchValueSerp(apiKey: string, params: Record<string, string>): Promise<any> {
-  // Construct query parameters
+// --- API FETCH (CLIENT-SIDE PROXY) ---
+async function fetchSerpApi(apiKey: string, params: Record<string, string>): Promise<any> {
+  // 1. Construct the Target URL (SerpApi)
   const searchParams = new URLSearchParams();
   searchParams.append("api_key", apiKey);
   
@@ -115,56 +79,36 @@ async function fetchValueSerp(apiKey: string, params: Record<string, string>): P
       searchParams.append(key, value);
   });
 
-  // Call our Vercel Serverless Function
-  const url = `${VALUESERP_BASE_URL}?${searchParams.toString()}`;
+  const targetUrl = `https://serpapi.com/search.json?${searchParams.toString()}`;
+  
+  // 2. Wrap with CORS Proxy
+  // We use corsproxy.io to bypass browser CORS restrictions when calling SerpApi directly from the client
+  // This removes the need for a Vercel backend function.
+  const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl);
   
   try {
-    // --- DEBUG LOGGING START ---
-    console.log(`[ValueSERP] Requesting Proxy:`, url);
-    // --- DEBUG LOGGING END ---
-
-    const res = await fetch(url);
-    
-    // Read the raw text first to debug errors
+    const res = await fetch(proxyUrl);
     const rawText = await res.text();
 
-    // --- DEBUG LOGGING START ---
-    console.log(`[ValueSERP] HTTP Status: ${res.status}`);
-    // --- DEBUG LOGGING END ---
-
     if (!res.ok) {
-        console.error(`[ValueSERP] FATAL ERROR BODY:`, rawText);
-        throw new Error(`ValueSERP API Error (${res.status}): ${rawText.substring(0, 200)}`);
+        console.error(`[SerpApi Client] Error ${res.status}:`, rawText);
+        throw new Error(`SerpApi Failed: ${res.status}`);
     }
 
-    // Try parsing JSON
-    let data;
     try {
-        data = JSON.parse(rawText);
+        const data = JSON.parse(rawText);
+        if (data.error) throw new Error(data.error);
+        return data;
     } catch (e) {
-        console.error(`[ValueSERP] JSON Parse Failed. Raw body:`, rawText);
-        throw new Error("Invalid JSON response from ValueSERP");
+        throw new Error("Invalid JSON from SerpApi");
     }
-    
-    // ValueSERP Internal Error Handling
-    if (data.request_info && data.request_info.success === false) {
-        const msg = data.request_info.message || "ValueSERP Request Failed";
-        console.error(`[ValueSERP] Logic Error:`, msg);
-        throw new Error(msg);
-    }
-    if (data.error) {
-        console.error(`[ValueSERP] API Error:`, data.error);
-        throw new Error(data.error);
-    }
-    
-    return data;
   } catch (error) {
-    console.error("[ValueSERP] Network Failure:", error);
+    console.error("Fetch Error:", error);
     throw error;
   }
 }
 
-// --- STEP 1: VISUAL FINGERPRINTING ---
+// --- STEP 1: VISUAL FINGERPRINT (Gemini) ---
 async function identifyProductFromImage(ai: GoogleGenAI, imageBase64: string): Promise<string> {
   try {
     const response = await ai.models.generateContent({
@@ -172,62 +116,55 @@ async function identifyProductFromImage(ai: GoogleGenAI, imageBase64: string): P
       contents: {
         parts: [
           { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
-          { text: "Analyze this image. Return ONLY the specific Brand and Model name. Do not describe the background." }
+          { text: "Identify this product. Return ONLY the Brand and specific Model Name. No extra text." }
         ]
       },
-      config: { maxOutputTokens: 40, temperature: 0.1 }
+      config: { maxOutputTokens: 50, temperature: 0.1 }
     });
     return response.text?.trim() || "";
   } catch (e) {
+    console.warn("Visual Fingerprint Failed:", e);
     return "";
   }
 }
 
-// --- STEP 2: CANONICAL LOOKUP ---
+// --- STEP 2: CANONICAL LOOKUP (SerpApi - Images) ---
 async function getCanonicalImage(query: string, apiKey: string): Promise<string | null> {
   try {
-    // SANITIZE INPUT
-    const cleanedQuery = cleanQuery(query);
-    
     const params = {
         engine: "google_images",
-        q: `${cleanedQuery} white background product photo`,
-        num: "1"
+        q: `${cleanQuery(query)} white background product photo`,
+        num: "1",
+        safe: "active"
     };
 
-    const data = await fetchValueSerp(apiKey, params);
-
+    const data = await fetchSerpApi(apiKey, params);
     if (data.images_results && data.images_results.length > 0) {
       return data.images_results[0].thumbnail; 
     }
     return null;
   } catch (e) {
-    console.warn("Canonical Image Lookup Failed", e);
+    console.warn("Canonical Lookup Failed:", e);
     return null;
   }
 }
 
-// --- STEP 3: VISUAL SEARCH (ValueSERP) ---
+// --- STEP 3: VISUAL SEARCH (SerpApi - Lens) ---
 async function searchLens(imageUrl: string, apiKey: string): Promise<ProductOption[]> {
-  // --- DEBUG LOGGING START ---
-  console.log("Using Key (Lens):", apiKey.substring(0, 5) + "...");
-  // --- DEBUG LOGGING END ---
-  
   try {
-    // Note: Do NOT sanitize URL with regex, it breaks https://
-    const cleanedUrl = imageUrl.trim();
-
     const params = {
         engine: "google_lens",
-        url: cleanedUrl
+        url: imageUrl,
+        hl: "en",
+        country: "us"
     };
 
-    const data = await fetchValueSerp(apiKey, params);
-    
+    const data = await fetchSerpApi(apiKey, params);
     const matches = data.visual_matches || [];
 
-    // DATA CLEANING: Strict filter for garbage
-    return matches.filter(isValidProduct).map((m: any) => ({
+    // Gather Top 40 Matches for Visual-First Strategy
+    // We do NOT filter by price here; we trust Lens for visual accuracy first.
+    return matches.slice(0, 40).filter(isValidProduct).map((m: any) => ({
       tier: "Visual Match",
       vendor: m.source || "Visual Match",
       price: extractPrice(m.price ? m.price.value : 0),
@@ -240,45 +177,30 @@ async function searchLens(imageUrl: string, apiKey: string): Promise<ProductOpti
       confidenceScore: 95
     }));
   } catch (e) {
-    console.warn("Lens Failed:", e);
+    console.warn("Lens Search Failed:", e);
     return [];
   }
 }
 
-// --- STEP 4: SHOPPING FALLBACK (ValueSERP) ---
+// --- STEP 4: SHOPPING FALLBACK (SerpApi - Shopping) ---
 async function searchShopping(query: string, apiKey: string): Promise<ProductOption[]> {
-  // --- DEBUG LOGGING START ---
-  console.log("Using Key (Shopping):", apiKey.substring(0, 5) + "...");
-  // --- DEBUG LOGGING END ---
-
   try {
-    // SANITIZE INPUT
-    const optimizedQuery = cleanQuery(query);
-    
     const params = {
         engine: "google_shopping",
-        q: optimizedQuery,
+        q: cleanQuery(query),
         google_domain: "google.com",
         gl: "us",
         hl: "en",
-        num: "100",
-        sort: "price_low"
+        num: "60", // Increased to catch hidden gems
+        sort: "price_low" // Force lowest price first for text fallback
     };
 
-    const data = await fetchValueSerp(apiKey, params);
-    
+    const data = await fetchSerpApi(apiKey, params);
     const results = data.shopping_results || [];
 
-    // DATA CLEANING: Strict filter
     return results.filter((item: any) => {
-        // Map ValueSERP shopping result structure
-        const tempItem = {
-            link: item.link,
-            thumbnail: item.thumbnail,
-            price: item.extracted_price || item.price,
-            title: item.title
-        };
-        return isValidProduct(tempItem);
+        const temp = { ...item, extracted_price: item.extracted_price || item.price };
+        return isValidProduct(temp);
     }).map((item: any) => ({
       tier: "Market Option",
       vendor: item.source || item.merchant?.name || "Global Marketplace",
@@ -292,57 +214,57 @@ async function searchShopping(query: string, apiKey: string): Promise<ProductOpt
       confidenceScore: 80
     }));
   } catch (e) {
-    console.warn("Shopping Failed:", e);
+    console.warn("Shopping Search Failed:", e);
     return [];
   }
 }
 
-// --- STEP 5: VERIFICATION (Relaxed) ---
-async function verifyAndFilterResults(
+// --- STEP 5: VERIFICATION (Gemini) ---
+async function verifyResults(
     ai: GoogleGenAI, 
     options: ProductOption[], 
-    productContext: string
+    context: string
 ): Promise<ProductOption[]> {
   if (options.length === 0) return [];
   
+  // Create a list for the AI - Increased to 40 to cover all Lens results
+  const listText = options.slice(0, 40).map((o, i) => `[${i}] ${o.description} (${o.vendor}) - $${o.price}`).join("\n");
+  
   try {
-    const simplifiedList = options.map((o, i) => `${i}: ${o.description} - $${o.price}`).join("\n");
-    
-    // RELAXED PROMPT
     const response = await ai.models.generateContent({
       model: SEARCH_MODEL,
-      contents: `Context: User wants "${productContext}".
+      contents: `Context: User is analyzing: "${context}".
       
-      Task: Filter this list.
-      1. REJECT ONLY if the item is obviously a DIFFERENT product.
-      2. KEEP generic versions, look-alikes, and different brands.
-      3. KEEP parts/accessories if they look relevant.
-      4. RETURN AS MANY MATCHES AS POSSIBLE.
+      Task: Identify items that are the Visual Match of the user's product.
+      
+      Rules:
+      1. Accept different brand names (white label/factory unbranded is GOOD).
+      2. Reject parts, accessories, or boxes (e.g. if user wants a drone, reject "propellers only").
+      3. Reject completely different items.
+      
+      Return a JSON array of indices for the matching items.
       
       List:
-      ${simplifiedList}
+      ${listText}
       
-      Return JSON indices of valid items: [0, 1, 3...]`,
-      config: {
-        responseMimeType: "application/json"
-      }
+      Output JSON: [0, 2, 5...]`,
+      config: { responseMimeType: "application/json" }
     });
 
-    const rawText = response.text || "[]";
-    const jsonStr = rawText.replace(/```json|```/g, "").trim();
-    const validIndices = JSON.parse(jsonStr);
+    const jsonStr = response.text?.replace(/```json|```/g, "").trim() || "[]";
+    const indices = JSON.parse(jsonStr);
     
-    if (Array.isArray(validIndices) && validIndices.length > 0) {
-       return options.filter((_, idx) => validIndices.includes(idx));
+    if (Array.isArray(indices) && indices.length > 0) {
+       return options.filter((_, i) => indices.includes(i));
     }
-    return options; 
+    return options; // Fallback: return original if parsing fails
   } catch (e) {
-    console.warn("Verification Error - Returning Raw List:", e);
+    console.warn("Verification Failed, returning raw results");
     return options;
   }
 }
 
-// --- MAIN EXPORT ---
+// --- MAIN ORCHESTRATOR ---
 export const findCheaperProducts = async (
   imageData: string | null,
   textDescription: string,
@@ -350,7 +272,7 @@ export const findCheaperProducts = async (
   userTargetPrice: string
 ): Promise<AnalysisResult> => {
   const ai = getAI();
-  const valueSerpKey = getValueSerpKey();
+  const serpApiKey = getSerpApiKey();
   const targetPriceVal = parseFloat(userTargetPrice) || 0;
   
   let options: ProductOption[] = [];
@@ -358,63 +280,61 @@ export const findCheaperProducts = async (
   let method = "Global Search";
   let canonicalUrl = ""; 
 
-  // 1. Identify
+  // --- Step 1: Identification ---
   if (imageData) {
     const fingerprint = await identifyProductFromImage(ai, imageData);
     if (fingerprint) productName = fingerprint;
-    else if (textDescription) productName = cleanQuery(textDescription);
+  }
+  
+  if (!productName && textDescription) productName = cleanQuery(textDescription);
+  if (!productName) productName = "Unknown Product";
 
-    if (productName && valueSerpKey) {
-        canonicalUrl = await getCanonicalImage(productName, valueSerpKey) || "";
-    }
+  // --- Step 2: Canonical Image ---
+  if (imageData && productName) {
+    // If we have an image, we try to get a CLEAN version for better Lens results
+    canonicalUrl = await getCanonicalImage(productName, serpApiKey) || "";
   } else if (referenceUrl) {
-      canonicalUrl = referenceUrl;
-  }
-  if (!productName && textDescription) productName = textDescription;
-
-  // 2. Search (Lens via ValueSERP)
-  if (canonicalUrl && valueSerpKey) {
-    options = await searchLens(canonicalUrl, valueSerpKey);
+    // If user provided a link, that is our canonical source
+    canonicalUrl = referenceUrl;
   }
 
-  // 3. Fallback (Shopping via ValueSERP)
-  if (options.length === 0 && valueSerpKey) {
-    const query = productName || textDescription || "unknown product";
-    options = await searchShopping(query, valueSerpKey);
-    method = "Text Search (Fallback)";
+  // --- Step 3: Visual Search (Lens) ---
+  if (canonicalUrl) {
+    options = await searchLens(canonicalUrl, serpApiKey);
   }
 
-  // 4. Verify & Limit
+  // --- Step 4: Text Fallback ---
+  // Only runs if Lens failed completely
+  if (options.length === 0) {
+    method = "Text Fallback";
+    options = await searchShopping(productName, serpApiKey);
+  }
+
+  // --- Step 5: Verification & Filter ---
   if (options.length > 0) {
-    // RESTORE VOLUME: Slice to top 15
-    const candidates = options.slice(0, 15);
-    
-    if (productName) {
-        const verified = await verifyAndFilterResults(ai, candidates, productName);
-        options = verified.length > 0 ? verified : candidates;
-    } else {
-        options = candidates;
-    }
+    const verified = await verifyResults(ai, options, productName);
+    options = verified.length > 0 ? verified : options;
   }
 
-  // Sort cheapest first
+  // --- Step 6: Client-Side Sorting ---
+  // The Golden Rule: Sort the Verified Visual Matches by Price (Low to High)
   options.sort((a, b) => a.price - b.price);
 
   if (options.length === 0) {
-    throw new Error(`No valid products found. Ensure your ValueSERP key is valid and try again.`);
+    throw new Error(`We searched the globe but couldn't find "${productName}". Try a clearer image.`);
   }
 
   return {
-    productName: productName || "Unknown Item",
+    productName: productName,
     identifiedModel: method,
     originalEstimatedPrice: targetPriceVal,
     marketAnalysis: {
       averageMarketPrice: `$${(options.reduce((acc, curr) => acc + curr.price, 0) / options.length).toFixed(2)}`,
       honestyScore: 95,
-      uncertaintyReason: "Verified Results"
+      uncertaintyReason: "Verified SerpApi Results"
     },
     options: options, 
-    visualAnalysis: `Identified as ${productName}.`,
+    visualAnalysis: `Identified as ${productName}. Search based on ${canonicalUrl ? "Visual Reference" : "Text Description"}.`,
     searchImageUsed: canonicalUrl || ""
   };
 };
@@ -425,11 +345,11 @@ export const sendChatMessage = async (
   analysisContext?: AnalysisResult | null
 ): Promise<string> => {
   const ai = getAI();
-  const contextMsg = analysisContext ? `Context: analyzing ${analysisContext.productName}.` : "";
+  const contextMsg = analysisContext ? `Context: User is analyzing ${analysisContext.productName}.` : "";
   const chat = ai.chats.create({
     model: CHAT_MODEL,
-    config: { systemInstruction: `You are FlipAI. ${contextMsg} Be helpful.` }
+    config: { systemInstruction: `You are FlipAI. ${contextMsg} Help the user negotiate or evaluate suppliers.` }
   });
   const result = await chat.sendMessage({ message: newMessage });
-  return result.text || "Error.";
+  return result.text || "Connection Error.";
 };

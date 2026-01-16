@@ -10,9 +10,9 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         proxy: {
           '/api/search': {
-            target: 'https://api.valueserp.com',
+            target: 'https://serpapi.com',
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api\/search/, '/search')
+            rewrite: (path) => path.replace(/^\/api\/search/, '/search.json')
           }
         }
       },
@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.VALUESERP_API_KEY': JSON.stringify(env.VALUESERP_API_KEY)
+        'process.env.SERPAPI_API_KEY': JSON.stringify(env.SERPAPI_API_KEY)
       },
       resolve: {
         alias: {

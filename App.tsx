@@ -12,7 +12,6 @@ const App: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Settings modal removed per guidelines
   
   // State for Plans and Credits with Persistence
   const [userPlan, setUserPlan] = useState<'free' | 'hustler' | 'manager' | 'owner'>(() => {
@@ -25,7 +24,6 @@ const App: React.FC = () => {
   });
   
   const [currentView, setCurrentView] = useState<'home' | 'pricing'>('home');
-  const [showLegal, setShowLegal] = useState<'privacy' | 'terms' | null>(null);
 
   // Check Subscription Expiry on Mount
   useEffect(() => {
@@ -75,11 +73,6 @@ const App: React.FC = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  };
-
-  const handleReset = () => {
-    setAnalysisResult(null);
-    setError(null);
   };
 
   const handlePlanSelect = (newCredits: number, planIdOrName: string) => {
@@ -147,51 +140,45 @@ const App: React.FC = () => {
                   <ShieldCheckIcon className="w-4 h-4" />
                   <span>Powered by Neural Vision & Deep Search</span>
                 </div>
-                <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 tracking-tight leading-tight">
-                  Automated <br className="hidden md:block" />
-                  <span className="text-[#00F0FF] drop-shadow-[0_0_10px_rgba(0,240,255,0.4)]">Arbitrage Engine.</span>
+                <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
+                  Find the <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00F0FF] to-cyan-500">Factory.</span> Cut the Cost.
                 </h2>
-                <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                  Upload an image or URL. We identify the factory source and find the lowest price globally.
+                <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+                  Upload any product image. Our AI will identify the exact model and find the direct factory suppliers instantly.
                 </p>
               </div>
             )}
 
             {error && (
-              <div className="mb-8 p-4 bg-red-950/30 border border-red-500/50 rounded-lg text-red-400 text-center font-medium flex flex-col items-center animate-pulse">
-                <span>{error}</span>
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mb-6 flex items-center animate-fade-in">
+                 <span className="mr-2">⚠️</span> {error}
               </div>
             )}
 
             {!analysisResult ? (
               <InputSection onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
             ) : (
-              <div className="space-y-8">
-                <button onClick={handleReset} className="flex items-center space-x-2 text-slate-500 font-medium hover:text-[#00F0FF] transition-colors group">
-                  <ArrowPathIcon className="w-5 h-5 group-hover:-rotate-180 transition-transform duration-500" />
-                  <span>Check Another Product</span>
-                </button>
-                <ResultsDisplay result={analysisResult} />
+              <div className="space-y-6">
+                 <button 
+                   onClick={() => setAnalysisResult(null)}
+                   className="flex items-center text-sm font-bold text-slate-500 hover:text-[#00F0FF] transition-colors"
+                 >
+                   <ArrowPathIcon className="w-4 h-4 mr-1" />
+                   New Search
+                 </button>
+                 <ResultsDisplay result={analysisResult} />
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-[#050505] border-t border-white/5 py-10 mt-12">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-sm text-slate-600">
-          <p>&copy; {new Date().getFullYear()} FlipAI. Visual Sourcing Intelligence.</p>
-        </div>
-      </footer>
+      <ChatAssistant 
+        analysisResult={analysisResult} 
+        userPlan={userPlan} 
+        onUpgrade={() => setCurrentView('pricing')}
+      />
 
-      {currentView === 'home' && (
-         <ChatAssistant 
-            analysisResult={analysisResult} 
-            userPlan={userPlan}
-            onUpgrade={() => setCurrentView('pricing')}
-         />
-      )}
     </div>
   );
 };
